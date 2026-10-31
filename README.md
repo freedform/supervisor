@@ -9,6 +9,9 @@ Role supervisor installs and configures Supervisor process control system and ma
   - [supervisor_actions](#supervisor_actions)
   - [supervisor_config](#supervisor_config)
   - [supervisor_config_dir](#supervisor_config_dir)
+  - [supervisor_program_names](#supervisor_program_names)
+  - [supervisor_program_signal](#supervisor_program_signal)
+  - [supervisor_program_state](#supervisor_program_state)
   - [supervisor_programs](#supervisor_programs)
   - [supervisor_state_action](#supervisor_state_action)
   - [supervisor_version](#supervisor_version)
@@ -36,7 +39,7 @@ Use comma without spaces as a delimiter for multiple actions.
 
 ```YAML
   supervisor_actions: install
-  supervisor_actions: install,deploy_config,deploy_programs,state_control
+  supervisor_actions: install,deploy_config,deploy_programs,program_state_control
 ```
 
 ### supervisor_config
@@ -78,6 +81,66 @@ Supervisor configuration directory
 
 ```YAML
 supervisor_config_dir: /etc/supervisor
+```
+
+### supervisor_program_names
+
+Names of programs (keys of `supervisor_programs`) targeted by `program_state_control`.
+All processes of a program are targeted, including every process of a program with `numprocs` > 1.
+An empty list targets all programs known to Supervisor.
+
+**_Type:_** List<br />
+
+#### Default value
+
+```YAML
+supervisor_program_names: []
+```
+
+#### Example usage
+
+```YAML
+  supervisor_program_names:
+    - queue_worker
+    - scheduler
+```
+
+### supervisor_program_signal
+
+Signal sent to programs when `supervisor_program_state: signalled`
+
+**_Required:_** `true`, only in case `supervisor_program_state: signalled`<br />
+**_Type:_** String<br />
+
+#### Example usage
+
+```YAML
+  supervisor_program_signal: HUP
+  supervisor_program_signal: USR2
+```
+
+### supervisor_program_state
+
+Controls state of Supervisor programs.
+`updated` runs `supervisorctl reread` and `supervisorctl update` to apply program configs
+deployed by `deploy_programs`: adds new programs, restarts changed ones, removes deleted ones.
+`started` and `stopped` only act on processes that are not already in the requested state.
+`restarted` always restarts the targeted processes, `signalled` sends `supervisor_program_signal`
+to the running ones.
+A stop does not survive a daemon restart when the program has `autostart=true`,
+set `autostart: false` in `supervisor_programs` to disable a program permanently.
+
+**_Required:_** `true`, only in case `supervisor_actions: program_state_control`<br />
+**_Type:_** String<br />
+
+#### Example usage
+
+```YAML
+  supervisor_program_state: updated
+  supervisor_program_state: started
+  supervisor_program_state: stopped
+  supervisor_program_state: restarted
+  supervisor_program_state: signalled
 ```
 
 ### supervisor_programs

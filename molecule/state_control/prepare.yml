@@ -5,8 +5,9 @@
   roles:
     - role: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
       vars:
-        supervisor_actions: install,deploy_config,deploy_programs,state_control
+        supervisor_actions: install,deploy_config,deploy_programs,state_control,program_state_control
         supervisor_state_action: started
+        supervisor_program_state: updated
         supervisor_config:
           unix_http_server:
             file: /var/run/supervisor.sock

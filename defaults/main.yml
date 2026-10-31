@@ -5,7 +5,7 @@
 # @var supervisor_actions:type: String
 # @var supervisor_actions:example: >
 #   supervisor_actions: install
-#   supervisor_actions: install,deploy_config,deploy_programs,state_control
+#   supervisor_actions: install,deploy_config,deploy_programs,program_state_control
 # @end
 
 # @var supervisor_version:description: >
@@ -80,4 +80,43 @@ supervisor_config_dir: /etc/supervisor
 #   supervisor_state_action: stopped
 #   supervisor_state_action: restarted
 #   supervisor_state_action: reloaded
+# @end
+
+# @var supervisor_program_state:description: >
+# Controls state of Supervisor programs.
+# `updated` runs `supervisorctl reread` and `supervisorctl update` to apply program configs
+# deployed by `deploy_programs`: adds new programs, restarts changed ones, removes deleted ones.
+# `started` and `stopped` only act on processes that are not already in the requested state.
+# `restarted` always restarts the targeted processes, `signalled` sends `supervisor_program_signal`
+# to the running ones.
+# A stop does not survive a daemon restart when the program has `autostart=true`,
+# set `autostart: false` in `supervisor_programs` to disable a program permanently.
+# @var supervisor_program_state:required: `true`, only in case `supervisor_actions: program_state_control`
+# @var supervisor_program_state:type: String
+# @var supervisor_program_state:example: >
+#   supervisor_program_state: updated
+#   supervisor_program_state: started
+#   supervisor_program_state: stopped
+#   supervisor_program_state: restarted
+#   supervisor_program_state: signalled
+# @end
+
+# @var supervisor_program_names:description: >
+# Names of programs (keys of `supervisor_programs`) targeted by `program_state_control`.
+# All processes of a program are targeted, including every process of a program with `numprocs` > 1.
+# An empty list targets all programs known to Supervisor.
+# @var supervisor_program_names:type: List
+# @var supervisor_program_names:example: >
+#   supervisor_program_names:
+#     - queue_worker
+#     - scheduler
+# @end
+supervisor_program_names: []
+
+# @var supervisor_program_signal:description: Signal sent to programs when `supervisor_program_state: signalled`
+# @var supervisor_program_signal:required: `true`, only in case `supervisor_program_state: signalled`
+# @var supervisor_program_signal:type: String
+# @var supervisor_program_signal:example: >
+#   supervisor_program_signal: HUP
+#   supervisor_program_signal: USR2
 # @end

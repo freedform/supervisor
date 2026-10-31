@@ -1,0 +1,166 @@
+---
+# Walks programs through stopped -> started -> restarted -> signalled -> updated,
+# asserting the effect of each state in between. The final state is checked by verify.yml.
+- name: Converge
+  hosts: all
+  gather_facts: false
+  vars:
+    supervisor_role: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+  tasks:
+    - name: Wait for all programs to be RUNNING
+      ansible.builtin.command: supervisorctl status
+      register: initial_status
+      until: initial_status.stdout_lines | select('search', 'RUNNING') | list | length == 4
+      retries: 10
+      delay: 1
+      changed_when: false
+      failed_when: false
+
+    - name: Assert all programs were loaded by updated state
+      ansible.builtin.assert:
+        that: initial_status.stdout_lines | select('search', 'RUNNING') | list | length == 4
+        fail_msg: "single, multi:multi_00, multi:multi_01 and hup should be RUNNING, got: {{ initial_status.stdout }}"
+
+    # stopped
+    - name: Stop multi program
+      ansible.builtin.include_role:
+        name: "{{ supervisor_role }}"
+      vars:
+        supervisor_actions: program_state_control
+        supervisor_program_state: stopped
+        supervisor_program_names: [multi]
+
+    - name: Get status after stop
+      ansible.builtin.command: supervisorctl status
+      register: status_after_stop
+      changed_when: false
+      failed_when: false
+
+    - name: Assert only multi processes were stopped
+      ansible.builtin.assert:
+        that:
+          - status_after_stop.stdout is search('multi:multi_00\s+STOPPED')
+          - status_after_stop.stdout is search('multi:multi_01\s+STOPPED')
+          - status_after_stop.stdout is search('single\s+RUNNING')
+          - status_after_stop.stdout is search('hup\s+RUNNING')
+        fail_msg: "only multi should be STOPPED, got: {{ status_after_stop.stdout }}"
+
+    - name: Stop multi program again
+      ansible.builtin.include_role:
+        name: "{{ supervisor_role }}"
+      vars:
+        supervisor_actions: program_state_control
+        supervisor_program_state: stopped
+        supervisor_program_names: [multi]
+
+    - name: Assert second stop was a no-op
+      ansible.builtin.assert:
+        that: supervisor_program_result is skipped
+        fail_msg: "stopping already stopped program should not run supervisorctl"
+
+    # started, targeting all programs
+    - name: Start all programs
+      ansible.builtin.include_role:
+        name: "{{ supervisor_role }}"
+      vars:
+        supervisor_actions: program_state_control
+        supervisor_program_state: started
+
+    - name: Assert start only touched stopped processes
+      ansible.builtin.assert:
+        that: supervisor_program_result.cmd == ['supervisorctl', 'start', 'multi:multi_00', 'multi:multi_01']
+        fail_msg: "start should target only stopped processes, ran: {{ supervisor_program_result.cmd }}"
+
+    - name: Wait for all programs to be RUNNING after start
+      ansible.builtin.command: supervisorctl status
+      register: status_after_start
+      until: status_after_start.stdout_lines | select('search', 'RUNNING') | list | length == 4
+      retries: 10
+      delay: 1
+      changed_when: false
+      failed_when: status_after_start.stdout_lines | select('search', 'RUNNING') | list | length != 4
+
+    # restarted
+    - name: Get single PID before restart
+      ansible.builtin.command: supervisorctl pid single
+      register: single_pid_before
+      changed_when: false
+
+    - name: Restart single program
+      ansible.builtin.include_role:
+        name: "{{ supervisor_role }}"
+      vars:
+        supervisor_actions: program_state_control
+        supervisor_program_state: restarted
+        supervisor_program_names: [single]
+
+    - name: Get single PID after restart
+      ansible.builtin.command: supervisorctl pid single
+      register: single_pid_after
+      changed_when: false
+
+    - name: Assert single was restarted
+      ansible.builtin.assert:
+        that:
+          - single_pid_after.stdout is regex('^[1-9][0-9]*$')
+          - single_pid_after.stdout != single_pid_before.stdout
+        fail_msg: "single PID should change after restart"
+
+    # signalled
+    - name: Send HUP to hup program
+      ansible.builtin.include_role:
+        name: "{{ supervisor_role }}"
+      vars:
+        supervisor_actions: program_state_control
+        supervisor_program_state: signalled
+        supervisor_program_names: [hup]
+        supervisor_program_signal: HUP
+
+    - name: Wait for hup program to record the signal
+      ansible.builtin.command: cat /tmp/hup_trap.log
+      register: hup_log
+      until: "'HUP' in hup_log.stdout"
+      retries: 10
+      delay: 1
+      changed_when: false
+
+    # unknown program
+    - name: Target an unknown program
+      block:
+        - name: Restart unknown program
+          ansible.builtin.include_role:
+            name: "{{ supervisor_role }}"
+          vars:
+            supervisor_actions: program_state_control
+            supervisor_program_state: restarted
+            supervisor_program_names: [does_not_exist]
+
+        - name: Fail if unknown program was accepted
+          ansible.builtin.set_fact:
+            unknown_program_accepted: true
+      rescue:
+        - name: Record unknown program rejection
+          ansible.builtin.set_fact:
+            unknown_program_accepted: false
+
+    - name: Assert unknown program was rejected
+      ansible.builtin.assert:
+        that: not unknown_program_accepted
+        fail_msg: "targeting an unknown program should fail"
+
+    # updated: remove hup, add extra
+    - name: Change programs and apply them
+      ansible.builtin.include_role:
+        name: "{{ supervisor_role }}"
+      vars:
+        supervisor_actions: deploy_programs,program_state_control
+        supervisor_program_state: updated
+        supervisor_programs:
+          single:
+            command: /bin/sleep infinity
+          multi:
+            command: /bin/sleep infinity
+            numprocs: 2
+            process_name: "%(program_name)s_%(process_num)02d"
+          extra:
+            command: /bin/sleep infinity

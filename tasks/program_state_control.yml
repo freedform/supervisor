@@ -1,0 +1,90 @@
+- name: Validate variables for program_state_control.yml task
+  ansible.builtin.assert:
+    that:
+      - supervisor_program_state is defined
+      - supervisor_program_state in supervisor_supported_program_states
+      - supervisor_program_names is defined
+      - supervisor_program_names is sequence
+      - supervisor_program_names is not string
+      - supervisor_program_state != 'signalled' or (supervisor_program_signal | default('') | length > 0)
+    fail_msg: >-
+      supervisor_program_state must be one of: {{ supervisor_supported_program_states | join(', ') }},
+      supervisor_program_names must be a list,
+      supervisor_program_signal is required for signalled
+
+- name: Apply Supervisor program configs
+  when: supervisor_program_state == 'updated'
+  block:
+    - name: Reread Supervisor program configs
+      ansible.builtin.command: supervisorctl reread
+      register: supervisor_reread
+      changed_when: "'No config updates' not in supervisor_reread.stdout"
+      failed_when: supervisor_reread.rc != 0 or 'ERROR' in supervisor_reread.stdout
+
+    - name: Update Supervisor programs
+      ansible.builtin.command:
+        argv: "{{ ['supervisorctl', 'update'] + supervisor_program_names }}"
+      register: supervisor_update
+      changed_when: supervisor_update.stdout | trim | length > 0
+      failed_when: supervisor_update.rc != 0 or 'ERROR' in supervisor_update.stdout
+
+- name: Control Supervisor programs
+  when: supervisor_program_state != 'updated'
+  block:
+    - name: Get Supervisor processes status
+      ansible.builtin.command: supervisorctl status
+      register: supervisor_status
+      changed_when: false
+      # supervisorctl status exits with 3 when some processes are not running
+      failed_when: supervisor_status.rc not in [0, 3]
+
+    - name: Collect targeted Supervisor processes
+      ansible.builtin.set_fact:
+        supervisor_target_processes: >-
+          {{ dict(supervisor_status.stdout_lines
+                  | map('regex_search', '^(\S+)\s+(\S+)', '\1', '\2')
+                  | select | list)
+             | dict2items
+             | selectattr('key', 'match', supervisor_program_pattern)
+             | list }}
+      vars:
+        supervisor_program_pattern: >-
+          {{ '.*' if supervisor_program_names | length == 0
+             else '^(' + supervisor_program_names | map('regex_escape') | join('|') + ')(:|$)' }}
+
+    - name: Validate targeted Supervisor programs exist
+      ansible.builtin.assert:
+        that:
+          - supervisor_unknown_programs | length == 0
+        fail_msg: "Unknown Supervisor programs: {{ supervisor_unknown_programs | join(', ') }}"
+      vars:
+        supervisor_unknown_programs: >-
+          {{ supervisor_program_names
+             | reject('in', supervisor_target_processes | map(attribute='key')
+                            | map('regex_replace', ':.*$', '') | list)
+             | list }}
+
+    - name: "Set Supervisor programs to {{ supervisor_program_state }}"
+      ansible.builtin.command:
+        argv: "{{ supervisor_command[supervisor_program_state] + supervisor_processes[supervisor_program_state] }}"
+      when: supervisor_processes[supervisor_program_state] | length > 0
+      register: supervisor_program_result
+      changed_when: true
+      failed_when: supervisor_program_result.rc != 0 or 'ERROR' in supervisor_program_result.stdout
+      vars:
+        supervisor_all: "{{ supervisor_target_processes | map(attribute='key') | list }}"
+        supervisor_running: >-
+          {{ supervisor_target_processes
+             | selectattr('value', 'in', supervisor_running_process_states)
+             | map(attribute='key') | list }}
+        supervisor_not_running: "{{ supervisor_all | difference(supervisor_running) }}"
+        supervisor_command:
+          started: [supervisorctl, start]
+          stopped: [supervisorctl, stop]
+          restarted: [supervisorctl, restart]
+          signalled: [supervisorctl, signal, "{{ supervisor_program_signal | default('') }}"]
+        supervisor_processes:
+          started: "{{ supervisor_not_running }}"
+          stopped: "{{ supervisor_running }}"
+          restarted: "{{ supervisor_all }}"
+          signalled: "{{ supervisor_running }}"

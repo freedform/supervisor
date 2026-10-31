@@ -3,9 +3,21 @@ supervisor_supported_actions:
   - deploy_config
   - deploy_programs
   - state_control
+  - program_state_control
   - remove
 supervisor_supported_states:
   - started
   - stopped
   - restarted
   - reloaded
+supervisor_supported_program_states:
+  - updated
+  - started
+  - stopped
+  - restarted
+  - signalled
+# supervisorctl states in which a process counts as running
+supervisor_running_process_states:
+  - RUNNING
+  - STARTING
+  - BACKOFF

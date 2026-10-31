@@ -1,0 +1,23 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Wait for extra program to be RUNNING
+      ansible.builtin.command: supervisorctl status
+      register: final_status
+      until: final_status.stdout is search('extra\s+RUNNING')
+      retries: 10
+      delay: 1
+      changed_when: false
+      failed_when: false
+
+    - name: Assert updated state applied program changes
+      ansible.builtin.assert:
+        that:
+          - final_status.stdout is search('extra\s+RUNNING')
+          - final_status.stdout is search('single\s+RUNNING')
+          - final_status.stdout is search('multi:multi_00\s+RUNNING')
+          - final_status.stdout is search('multi:multi_01\s+RUNNING')
+          - final_status.stdout is not search('hup')
+        fail_msg: "extra should be added and hup removed, got: {{ final_status.stdout }}"
