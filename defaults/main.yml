@@ -1,0 +1,83 @@
+# @var supervisor_actions:description: >
+# List of actions the role does, accepts one or more actions.
+# Use comma without spaces as a delimiter for multiple actions.
+# @var supervisor_actions:required: `true`
+# @var supervisor_actions:type: String
+# @var supervisor_actions:example: >
+#   supervisor_actions: install
+#   supervisor_actions: install,deploy_config,deploy_programs,state_control
+# @end
+
+# @var supervisor_version:description: >
+# Supervisor version to install. Defaults to `latest` which installs the newest available package.
+# Set to a specific version string to pin the installation.
+# @var supervisor_version:type: String
+# @var supervisor_version:example: >
+#   supervisor_version: latest
+#   supervisor_version: 4.2.5-1
+# @end
+supervisor_version: latest
+
+# @var supervisor_config_dir:description: Supervisor configuration directory
+# @var supervisor_config_dir:type: String
+# @end
+supervisor_config_dir: /etc/supervisor
+
+# @var supervisor_config:description: >
+# Content of `supervisord.conf`, rendered into `{{ supervisor_config_dir }}/supervisord.conf`.
+# Keys are section names, values are dicts of the section's settings.
+# The `include` section must point to `conf.d/*.conf`, otherwise programs deployed
+# by `deploy_programs` are not loaded.
+# @var supervisor_config:required: `true`, only in case `supervisor_actions: deploy_config`
+# @var supervisor_config:type: Dict
+# @var supervisor_config:example: $>
+# {
+#   "unix_http_server": {
+#     "file": "/var/run/supervisor.sock",
+#     "chmod": "0700"
+#   },
+#   "supervisord": {
+#     "logfile": "/var/log/supervisor/supervisord.log",
+#     "pidfile": "/var/run/supervisord.pid",
+#     "childlogdir": "/var/log/supervisor"
+#   },
+#   "rpcinterface:supervisor": {
+#     "supervisor.rpcinterface_factory": "supervisor.rpcinterface:make_main_rpcinterface"
+#   },
+#   "supervisorctl": {
+#     "serverurl": "unix:///var/run/supervisor.sock"
+#   },
+#   "include": {
+#     "files": "/etc/supervisor/conf.d/*.conf"
+#   }
+# }
+# @end
+
+# @var supervisor_programs:description: >
+# Programs managed by Supervisor, all rendered into `{{ supervisor_config_dir }}/conf.d/ansible_managed.conf`.
+# Keys are program names (rendered as `[program:<name>]`), values are dicts of the program's settings.
+# @var supervisor_programs:required: `true`, only in case `supervisor_actions: deploy_programs`
+# @var supervisor_programs:type: Dict
+# @var supervisor_programs:example: $>
+# {
+#   "queue_worker": {
+#     "command": "/usr/bin/php /var/www/app/artisan queue:work",
+#     "user": "www-data",
+#     "numprocs": 4,
+#     "process_name": "%(program_name)s_%(process_num)02d",
+#     "autostart": true,
+#     "autorestart": true,
+#     "stdout_logfile": "/var/log/supervisor/queue_worker.log"
+#   }
+# }
+# @end
+
+# @var supervisor_state_action:description: Controls state of Supervisor daemon
+# @var supervisor_state_action:required: `true`, only in case `supervisor_actions: state_control`
+# @var supervisor_state_action:type: String
+# @var supervisor_state_action:example: >
+#   supervisor_state_action: started
+#   supervisor_state_action: stopped
+#   supervisor_state_action: restarted
+#   supervisor_state_action: reloaded
+# @end

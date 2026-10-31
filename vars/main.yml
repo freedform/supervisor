@@ -1,0 +1,11 @@
+supervisor_supported_actions:
+  - install
+  - deploy_config
+  - deploy_programs
+  - state_control
+  - remove
+supervisor_supported_states:
+  - started
+  - stopped
+  - restarted
+  - reloaded

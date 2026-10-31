@@ -1,0 +1,92 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Gather package facts
+      ansible.builtin.package_facts:
+        manager: apt
+
+    - name: Assert supervisor package is installed
+      ansible.builtin.assert:
+        that: "'supervisor' in ansible_facts.packages"
+        fail_msg: "supervisor package should be installed"
+
+    - name: Stat supervisord.conf
+      ansible.builtin.stat:
+        path: /etc/supervisor/supervisord.conf
+      register: supervisor_conf
+
+    - name: Assert supervisord.conf exists with mode 0644
+      ansible.builtin.assert:
+        that:
+          - supervisor_conf.stat.exists
+          - supervisor_conf.stat.mode == '0644'
+        fail_msg: "/etc/supervisor/supervisord.conf should exist with mode 0644"
+
+    - name: Read supervisord.conf
+      ansible.builtin.slurp:
+        src: /etc/supervisor/supervisord.conf
+      register: supervisor_conf_content
+
+    - name: Assert supervisord.conf is rendered from supervisor_config
+      ansible.builtin.assert:
+        that:
+          - "'Ansible managed' in conf"
+          - "'[supervisord]' in conf"
+          - "'childlogdir = /var/log/supervisor' in conf"
+          - "'[include]' in conf"
+          - "'files = /etc/supervisor/conf.d/*.conf' in conf"
+        fail_msg: "supervisord.conf content does not match supervisor_config"
+      vars:
+        conf: "{{ supervisor_conf_content.content | b64decode }}"
+
+    - name: Stat ansible_managed.conf
+      ansible.builtin.stat:
+        path: /etc/supervisor/conf.d/ansible_managed.conf
+      register: supervisor_programs_conf
+
+    - name: Assert ansible_managed.conf exists with mode 0644
+      ansible.builtin.assert:
+        that:
+          - supervisor_programs_conf.stat.exists
+          - supervisor_programs_conf.stat.mode == '0644'
+        fail_msg: "/etc/supervisor/conf.d/ansible_managed.conf should exist with mode 0644"
+
+    - name: Read ansible_managed.conf
+      ansible.builtin.slurp:
+        src: /etc/supervisor/conf.d/ansible_managed.conf
+      register: supervisor_programs_content
+
+    - name: Assert ansible_managed.conf is rendered from supervisor_programs
+      ansible.builtin.assert:
+        that:
+          - "'[program:molecule_sleeper]' in conf"
+          - "'command = /bin/sleep infinity' in conf"
+        fail_msg: "ansible_managed.conf content does not match supervisor_programs"
+      vars:
+        conf: "{{ supervisor_programs_content.content | b64decode }}"
+
+    - name: Gather service facts
+      ansible.builtin.service_facts:
+
+    - name: Assert supervisor service is running and enabled
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services['supervisor.service'].state == 'running'
+          - ansible_facts.services['supervisor.service'].status == 'enabled'
+        fail_msg: "supervisor.service should be running and enabled"
+
+    - name: Wait for molecule_sleeper program to be RUNNING
+      ansible.builtin.command: supervisorctl status molecule_sleeper
+      register: program_status
+      until: "'RUNNING' in program_status.stdout"
+      retries: 10
+      delay: 1
+      changed_when: false
+      failed_when: false
+
+    - name: Assert molecule_sleeper program is RUNNING
+      ansible.builtin.assert:
+        that: "'RUNNING' in program_status.stdout"
+        fail_msg: "molecule_sleeper should be RUNNING, got: {{ program_status.stdout }}"

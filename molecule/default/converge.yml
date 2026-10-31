@@ -1,0 +1,29 @@
+---
+- name: Converge
+  hosts: all
+  gather_facts: false
+  roles:
+    - role: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      vars:
+        supervisor_actions: install,deploy_config,deploy_programs,state_control
+        supervisor_state_action: started
+        supervisor_config:
+          unix_http_server:
+            file: /var/run/supervisor.sock
+            chmod: "0700"
+          supervisord:
+            logfile: /var/log/supervisor/supervisord.log
+            pidfile: /var/run/supervisord.pid
+            childlogdir: /var/log/supervisor
+          rpcinterface:supervisor:
+            supervisor.rpcinterface_factory: supervisor.rpcinterface:make_main_rpcinterface
+          supervisorctl:
+            serverurl: unix:///var/run/supervisor.sock
+          include:
+            files: /etc/supervisor/conf.d/*.conf
+        supervisor_programs:
+          molecule_sleeper:
+            command: /bin/sleep infinity
+            autostart: true
+            autorestart: true
+            stdout_logfile: /var/log/supervisor/molecule_sleeper.log

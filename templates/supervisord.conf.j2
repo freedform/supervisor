@@ -1,0 +1,8 @@
+; {{ ansible_managed }}
+{% for section, settings in supervisor_config.items() %}
+
+[{{ section }}]
+{% for key, value in settings.items() %}
+{{ key }} = {{ value }}
+{% endfor %}
+{% endfor %}

@@ -1,0 +1,27 @@
+- name: Validate variables for install.yml task
+  ansible.builtin.assert:
+    that:
+      - supervisor_version is defined
+      - supervisor_version | length > 0
+      - supervisor_config_dir is defined
+    fail_msg: "supervisor_version must be non-empty and supervisor_config_dir must be defined"
+
+- name: Install Supervisor
+  ansible.builtin.apt:
+    name: "{{ 'supervisor' if supervisor_version == 'latest' else 'supervisor=' + supervisor_version }}"
+    state: "{{ 'latest' if supervisor_version == 'latest' else 'present' }}"
+    update_cache: true
+    allow_downgrade: "{{ supervisor_version != 'latest' }}"
+
+- name: Enable Supervisor service
+  ansible.builtin.service:
+    name: supervisor
+    enabled: true
+
+- name: Ensure Supervisor conf.d directory exists
+  ansible.builtin.file:
+    path: "{{ supervisor_config_dir }}/conf.d"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'

@@ -1,0 +1,7 @@
+galaxy_info:
+  author: freedform
+  description: Role supervisor installs and configures Supervisor process control system and manages its programs
+  min_ansible_version: "2.20"
+  license: MIT
+
+dependencies: []

@@ -1,0 +1,17 @@
+- name: Validate variables for deploy_programs.yml task
+  ansible.builtin.assert:
+    that:
+      - supervisor_config_dir is defined
+      - supervisor_programs is defined
+      - supervisor_programs is mapping
+      - supervisor_programs.values() | reject('mapping') | list | length == 0
+    fail_msg: "supervisor_programs must be a dict of programs, each program a dict of settings"
+
+- name: Deploy Supervisor programs
+  ansible.builtin.template:
+    src: programs.conf.j2
+    dest: "{{ supervisor_config_dir }}/conf.d/ansible_managed.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Apply Supervisor programs

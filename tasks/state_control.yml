@@ -1,0 +1,11 @@
+- name: Validate variables for state_control.yml task
+  ansible.builtin.assert:
+    that:
+      - supervisor_state_action is defined
+      - supervisor_state_action in supervisor_supported_states
+    fail_msg: "supervisor_state_action must be one of: {{ supervisor_supported_states | join(', ') }}"
+
+- name: Control Supervisor daemon
+  ansible.builtin.service:
+    name: supervisor
+    state: "{{ supervisor_state_action }}"

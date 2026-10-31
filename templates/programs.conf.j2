@@ -1,0 +1,8 @@
+; {{ ansible_managed }}
+{% for program, settings in supervisor_programs.items() %}
+
+[program:{{ program }}]
+{% for key, value in settings.items() %}
+{{ key }} = {{ value }}
+{% endfor %}
+{% endfor %}

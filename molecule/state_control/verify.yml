@@ -1,0 +1,17 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Gather service facts
+      ansible.builtin.service_facts:
+
+    - name: Assert supervisor service is stopped
+      ansible.builtin.assert:
+        that: "ansible_facts.services['supervisor.service'].state == 'stopped'"
+        fail_msg: "supervisor.service should be stopped"
+
+    - name: Assert supervisor service is still enabled
+      ansible.builtin.assert:
+        that: "ansible_facts.services['supervisor.service'].status == 'enabled'"
+        fail_msg: "stopping supervisor should not disable it"

@@ -1,0 +1,104 @@
+---
+# Walks the daemon through restarted -> reloaded -> stopped -> started -> stopped,
+# asserting the effect of each state in between. The final state (stopped) is checked by verify.yml.
+- name: Converge
+  hosts: all
+  gather_facts: false
+  vars:
+    supervisor_role: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+  tasks:
+    - name: Get supervisord PID before restart
+      ansible.builtin.command: systemctl show --property MainPID --value supervisor
+      register: pid_before_restart
+      changed_when: false
+
+    - name: Restart Supervisor
+      ansible.builtin.include_role:
+        name: "{{ supervisor_role }}"
+      vars:
+        supervisor_actions: state_control
+        supervisor_state_action: restarted
+
+    - name: Get supervisord PID after restart
+      ansible.builtin.command: systemctl show --property MainPID --value supervisor
+      register: pid_after_restart
+      changed_when: false
+
+    - name: Assert supervisord was restarted
+      ansible.builtin.assert:
+        that:
+          - pid_after_restart.stdout != '0'
+          - pid_after_restart.stdout != pid_before_restart.stdout
+        fail_msg: "supervisord PID should change after restart"
+
+    - name: Wait for molecule_sleeper to be RUNNING before reload
+      ansible.builtin.command: supervisorctl pid molecule_sleeper
+      register: program_pid_before_reload
+      until: program_pid_before_reload.stdout is regex('^[1-9][0-9]*$')
+      retries: 10
+      delay: 1
+      changed_when: false
+
+    - name: Reload Supervisor
+      ansible.builtin.include_role:
+        name: "{{ supervisor_role }}"
+      vars:
+        supervisor_actions: state_control
+        supervisor_state_action: reloaded
+
+    - name: Wait for molecule_sleeper to be restarted by reload
+      ansible.builtin.command: supervisorctl pid molecule_sleeper
+      register: program_pid_after_reload
+      until:
+        - program_pid_after_reload.stdout is regex('^[1-9][0-9]*$')
+        - program_pid_after_reload.stdout != program_pid_before_reload.stdout
+      retries: 10
+      delay: 1
+      changed_when: false
+      failed_when: false
+
+    - name: Get supervisord PID after reload
+      ansible.builtin.command: systemctl show --property MainPID --value supervisor
+      register: pid_after_reload
+      changed_when: false
+
+    - name: Assert reload kept the daemon and restarted programs
+      ansible.builtin.assert:
+        that:
+          - pid_after_reload.stdout == pid_after_restart.stdout
+          - program_pid_after_reload.stdout is regex('^[1-9][0-9]*$')
+          - program_pid_after_reload.stdout != program_pid_before_reload.stdout
+        fail_msg: "reload should keep supervisord PID and restart programs"
+
+    - name: Stop Supervisor
+      ansible.builtin.include_role:
+        name: "{{ supervisor_role }}"
+      vars:
+        supervisor_actions: state_control
+        supervisor_state_action: stopped
+
+    - name: Check Supervisor is stopped
+      ansible.builtin.command: systemctl is-active supervisor
+      register: state_after_stop
+      changed_when: false
+      failed_when: state_after_stop.stdout != 'inactive'
+
+    - name: Start Supervisor
+      ansible.builtin.include_role:
+        name: "{{ supervisor_role }}"
+      vars:
+        supervisor_actions: state_control
+        supervisor_state_action: started
+
+    - name: Check Supervisor is started
+      ansible.builtin.command: systemctl is-active supervisor
+      register: state_after_start
+      changed_when: false
+      failed_when: state_after_start.stdout != 'active'
+
+    - name: Stop Supervisor for verify
+      ansible.builtin.include_role:
+        name: "{{ supervisor_role }}"
+      vars:
+        supervisor_actions: state_control
+        supervisor_state_action: stopped

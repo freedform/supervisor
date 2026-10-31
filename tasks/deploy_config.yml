@@ -1,0 +1,16 @@
+- name: Validate variables for deploy_config.yml task
+  ansible.builtin.assert:
+    that:
+      - supervisor_config_dir is defined
+      - supervisor_config is defined
+      - supervisor_config is mapping
+      - supervisor_config.values() | reject('mapping') | list | length == 0
+    fail_msg: "supervisor_config must be a dict of sections, each section a dict of settings"
+
+- name: Deploy Supervisor main config
+  ansible.builtin.template:
+    src: supervisord.conf.j2
+    dest: "{{ supervisor_config_dir }}/supervisord.conf"
+    owner: root
+    group: root
+    mode: '0644'
